@@ -7,11 +7,12 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"sync/atomic"
 	"time"
 )
 
 // Global counters for directories and files
-var dirCount, fileCount int
+var dirCount, fileCount uint64
 var mu sync.Mutex // Mutex to protect shared variables
 
 // createHardLink creates a hard link for a file from src to dst.
@@ -23,9 +24,12 @@ func createHardLink(src, dst string) error {
 	}
 
 	// Increment file count
-	mu.Lock()
-	fileCount++
-	mu.Unlock()
+	atomic.AddUint64(&fileCount, 1)
+	/*
+		mu.Lock()
+		fileCount++
+		mu.Unlock()
+	*/
 
 	return nil
 }
@@ -65,9 +69,7 @@ func duplicateDirectoryStructure(srcRoot, dstRoot string, fileChan chan<- [2]str
 			}
 
 			// Increment directory count
-			mu.Lock()
-			dirCount++
-			mu.Unlock()
+			atomic.AddUint64(&dirCount, 1)
 		} else {
 			// If it's a file, send the file paths to the channel for the worker pool
 			fileChan <- [2]string{srcPath, dstPath}
@@ -106,9 +108,7 @@ func progressReporter(done chan struct{}) {
 	for {
 		select {
 		case <-ticker.C:
-			mu.Lock()
-			fmt.Printf("Progress: %d directories and %d files created\n", dirCount, fileCount)
-			mu.Unlock()
+			fmt.Printf("dirs: %12d files: %12d\n", atomic.LoadUint64(&dirCount), atomic.LoadUint64(&fileCount))
 		case <-done:
 			return
 		}
